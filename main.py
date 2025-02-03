@@ -27,7 +27,7 @@ def word_to_matrix(message):
 
     # Calculate center offset
     message_width = calculate_message_width(message)
-    offset = (52 - message_width) // 2  # Center horizontally
+    offset = -((-52 + message_width) // 2)  # Center horizontally
 
     # Fill in the matrix based on the message
     for letter in message:
@@ -35,7 +35,7 @@ def word_to_matrix(message):
             pattern = ALPHABET[letter]
             # Copy the pattern to the matrix at the current offset
             for row in range(5):  # 5 rows (Tuesday-Saturday)
-                for col in range(len(pattern[0])):  # 5 columns per letter
+                for col in range(len(pattern[0])):  # 4 columns per letter
                     if offset + col < 52:  # Ensure we don't exceed matrix width
                         matrix[row + 1][offset + col] = pattern[row][
                             col
@@ -47,15 +47,32 @@ def word_to_matrix(message):
     return matrix
 
 
-def visualize_matrix(matrix):
+def visualize_dates(dates, start_date):
     """
-    Visualize a 2D matrix as a contribution graph.
-    Uses '⬛' for filled squares and '⬜' for empty squares.
+    Visualize a list of dates as a contribution graph.
+    Uses '⬛' for dates with contributions and '⬜' for dates without.
     """
+    # Create empty 7x52 matrix
+    matrix = [[0] * 52 for _ in range(7)]
+
+    # Convert each date into matrix coordinates
+    for date in dates:
+        # Calculate how many days from start_date
+        days_diff = (date - start_date).days
+
+        # Calculate column (week number) and row (day of week)
+        col = days_diff // 7
+        row = days_diff % 7
+
+        # Only mark dates that fall within our 52-week window
+        if 0 <= col < 52 and 0 <= row < 7:
+            matrix[row][col] = 1
+
+    # Visualize the matrix
     for row in range(7):
         for col in range(52):
             print("⬛" if matrix[row][col] else "⬜", end="")
-        print()  # New line after each row
+        print()
 
 
 def matrix_to_dates(matrix, start_date):
@@ -72,13 +89,13 @@ def matrix_to_dates(matrix, start_date):
                 # Add row days to get the specific day of the week
                 current_date = start_date + timedelta(days=col * 7 + row)
                 dates.append(current_date)
-    return dates
+    return sorted(dates)
 
 
 def create_git_contributions(dates):
     """
     Create git commits for each date in the dates list.
-    Creates an orphan branch named 'gh-pages' and adds commits at 12PM UTC for each date.
+    Creates an orphan branch named 'gh-pages' and adds commits for each date.
 
     Raises:
         RuntimeError: If repository has uncommitted changes or if author/committer details cannot be retrieved
@@ -135,45 +152,55 @@ def create_git_contributions(dates):
     env["GIT_COMMITTER_NAME"] = committer_name
     env["GIT_COMMITTER_EMAIL"] = committer_email
 
+    # Times for the commits
+    commit_hours = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+
     for date in dates:
-        # Set commit date to 12PM UTC
-        commit_date = date.replace(hour=12, minute=0, second=0, microsecond=0)
-        date_str = commit_date.strftime("%Y-%m-%d 12:00:00 +0000")
+        for hour in commit_hours:
+            # Set commit date to the specified hour UTC
+            commit_date = date.replace(hour=hour, minute=0, second=0, microsecond=0)
+            date_str = commit_date.isoformat() + "Z"
 
-        # Set environment variables for commit dates
-        env["GIT_AUTHOR_DATE"] = date_str
-        env["GIT_COMMITTER_DATE"] = date_str
+            # Set environment variables for commit dates
+            env["GIT_AUTHOR_DATE"] = date_str
+            env["GIT_COMMITTER_DATE"] = date_str
 
-        # Create empty commit
-        subprocess.run(
-            [
-                "git",
-                "commit",
-                "--allow-empty",
-                "-m",
-                f"Contribution for {date.strftime('%Y-%m-%d')}",
-            ],
-            env=env,
-        )
+            # Create empty commit
+            subprocess.run(
+                [
+                    "git",
+                    "commit",
+                    "--allow-empty",
+                    "-m",
+                    date_str,
+                ],
+                env=env,
+            )
 
 
-def main(message):
+def main(message, dry_run=False):
     # get the current date
     today = datetime.now()
-    one_year_ago = today - timedelta(days=365)
 
-    # Find the first Sunday before or on one_year_ago
-    while one_year_ago.weekday() != 6:  # 6 is Sunday
-        one_year_ago -= timedelta(days=1)
+    # Find the last Sunday (end of the contribution graph)
+    end_date = today
+    while end_date.weekday() != 6:  # 6 is Sunday
+        end_date += timedelta(days=1)
+
+    # Calculate the start date (52 weeks before end_date)
+    start_date = end_date - timedelta(weeks=51)  # 51 weeks back gives us 52 weeks total
 
     # Generate matrix
     matrix = word_to_matrix(message)
 
-    # Print preview
-    visualize_matrix(matrix)
-
     # Generate dates
-    dates = matrix_to_dates(matrix, one_year_ago)
+    dates = matrix_to_dates(matrix, start_date)
+
+    # Print preview using the actual dates
+    visualize_dates(dates, start_date)
+
+    if dry_run:
+        return []
 
     # Create git contributions
     create_git_contributions(dates)
@@ -183,6 +210,13 @@ def main(message):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python main.py MESSAGE")
+        print("Usage: python main.py [--dry-run] MESSAGE")
         sys.exit(1)
-    main(message=" ".join(sys.argv[1:]))
+
+    if sys.argv[1] == "--dry-run":
+        if len(sys.argv) < 3:
+            print("Usage: python main.py [--dry-run] MESSAGE")
+            sys.exit(1)
+        main(message=" ".join(sys.argv[2:]), dry_run=True)
+    else:
+        main(message=" ".join(sys.argv[1:]))

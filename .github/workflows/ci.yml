@@ -23,5 +23,5 @@ jobs:
       - run: pipx install poetry
       - run: poetry install
       - run: poetry run ruff check
-      - run: poetry run python main.py HELLO
+      - run: poetry run python main.py HELLO WORLD
       - run: git push origin gh-pages --force
