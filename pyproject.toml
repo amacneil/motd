@@ -1,0 +1,10 @@
+[project]
+name = "motd"
+version = "0.0.0"
+requires-python = ">=3.13"
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.9.4"
