@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["*"]
+  pull_request:
+    branches: ["*"]
+  schedule:
+    - cron: "0 12 * * 0"  # 12:00 UTC every Sunday
+  workflow_dispatch:
+
+jobs:
+  CI:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: pipx install poetry
+      - run: poetry install
+      - run: poetry run ruff check
+      - run: poetry run python main.py HELLO
+      - run: git push origin gh-pages --force
